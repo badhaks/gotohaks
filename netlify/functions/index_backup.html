@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ALPHA DESK — IB Research Terminal</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&family=IBM+Plex+Sans+KR:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050810; --surface: #0b0f1e; --surface2: #111627;
+    --border: #1e2740; --border-bright: #2e3d60;
+    --accent: #00e5ff; --accent2: #7b61ff;
+    --bull: #00d68f; --bear: #ff4d6d; --neutral: #f0b429;
+    --text-primary: #e8eaf6; --text-secondary: #7986cb; --text-muted: #3d4f7c;
+    --font-mono: 'Space Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+    --font-body: 'IBM Plex Sans KR', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text-primary); font-family: var(--font-body); min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image: linear-gradient(rgba(0,229,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,0.015) 1px, transparent 1px);
+    background-size: 40px 40px; pointer-events: none; z-index: 0;
+  }
+
+  /* TOP BAR */
+  .topbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; height: 56px;
+    background: rgba(5,8,16,0.95); border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+  }
+  .logo { font-family: var(--font-display); font-size: 18px; font-weight: 800; letter-spacing: 0.15em; color: var(--accent); text-transform: uppercase; }
+  .logo span { color: var(--text-muted); font-weight: 400; }
+  .topbar-right { display: flex; align-items: center; gap: 20px; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .live-dot { width: 6px; height: 6px; background: var(--bull); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .api-status { font-family: var(--font-mono); font-size: 10px; cursor: pointer; padding: 4px 10px; border-radius: 2px; border: 1px solid var(--border); transition: all 0.15s; }
+  .api-status:hover { border-color: var(--accent); color: var(--accent); }
+  .api-status.connected { color: var(--bull); border-color: rgba(0,214,143,0.3); }
+
+  /* TICKER TAPE */
+  .ticker-tape { overflow: hidden; border-bottom: 1px solid var(--border); background: var(--surface2); padding: 8px 0; min-height: 38px; }
+  .ticker-tape-inner { display: flex; gap: 40px; white-space: nowrap; }
+  .ticker-tape-inner.animate { animation: tape 40s linear infinite; }
+  @keyframes tape { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  .tape-item { font-family: var(--font-mono); font-size: 11px; display: inline-flex; gap: 8px; align-items: center; }
+  .tape-ticker { color: var(--text-secondary); letter-spacing: 0.1em; }
+  .tape-price { color: var(--text-primary); }
+  .tape-chg.pos { color: var(--bull); }
+  .tape-chg.neg { color: var(--bear); }
+  .tape-loading { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); padding: 0 20px; display: flex; align-items: center; gap: 8px; }
+
+  /* API KEY MODAL */
+  .api-modal { position: fixed; inset: 0; z-index: 200; background: rgba(5,8,16,0.97); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); }
+  .api-modal.hidden { display: none; }
+  .api-box { background: var(--surface); border: 1px solid var(--border-bright); border-radius: 6px; padding: 40px; max-width: 480px; width: 90%; text-align: center; }
+  .api-box h2 { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--accent); margin-bottom: 8px; }
+  .api-box p { font-size: 12px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 24px; }
+  .api-input-wrap { display: flex; flex-direction: column; gap: 12px; }
+  .api-input-wrap input { background: var(--surface2); border: 1px solid var(--border-bright); border-radius: 3px; padding: 12px 16px; color: var(--text-primary); font-family: var(--font-mono); font-size: 13px; outline: none; }
+  .api-input-wrap input:focus { border-color: var(--accent); }
+  .api-input-wrap button { background: var(--accent); border: none; border-radius: 3px; padding: 12px; font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 0.1em; color: #050810; cursor: pointer; text-transform: uppercase; }
+  .api-input-wrap button:hover { background: #33eeff; }
+  .api-note { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-top: 16px; line-height: 1.6; }
+
+  /* SEARCH */
+  .search-section { position: relative; z-index: 1; padding: 48px 32px 32px; max-width: 900px; margin: 0 auto; text-align: center; }
+  .search-headline { font-family: var(--font-display); font-size: clamp(26px, 4vw, 46px); font-weight: 800; line-height: 1.1; margin-bottom: 8px; letter-spacing: -0.02em; }
+  .search-headline .hl { color: var(--accent); }
+  .search-sub { font-size: 12px; color: var(--text-secondary); margin-bottom: 32px; font-family: var(--font-mono); letter-spacing: 0.05em; }
+  .search-bar { display: flex; max-width: 640px; margin: 0 auto; border: 1px solid var(--border-bright); border-radius: 4px; overflow: hidden; background: var(--surface); transition: border-color 0.2s; }
+  .search-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,229,255,0.1); }
+  .search-bar input { flex: 1; background: transparent; border: none; outline: none; padding: 14px 20px; color: var(--text-primary); font-family: var(--font-mono); font-size: 14px; }
+  .search-bar input::placeholder { color: var(--text-muted); }
+  .search-bar button { background: var(--accent); border: none; padding: 0 28px; font-family: var(--font-display); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: #050810; cursor: pointer; text-transform: uppercase; white-space: nowrap; }
+  .search-bar button:hover { background: #33eeff; }
+  .search-bar button:disabled { background: var(--border-bright); color: var(--text-muted); cursor: not-allowed; }
+  .quick-chips { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .chip { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); border: 1px solid var(--border); padding: 4px 12px; border-radius: 2px; cursor: pointer; transition: all 0.15s; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* LOADING */
+  .loading-screen { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 60px 24px; text-align: center; display: none; }
+  .loading-screen.active { display: block; }
+  .loading-bars { display: flex; gap: 4px; justify-content: center; align-items: flex-end; height: 40px; margin-bottom: 24px; }
+  .loading-bar { width: 6px; background: var(--accent); border-radius: 3px; animation: bar 1.2s ease-in-out infinite; }
+  .loading-bar:nth-child(1){animation-delay:0s}
+  .loading-bar:nth-child(2){animation-delay:0.1s}
+  .loading-bar:nth-child(3){animation-delay:0.2s}
+  .loading-bar:nth-child(4){animation-delay:0.3s}
+  .loading-bar:nth-child(5){animation-delay:0.4s}
+  .loading-bar:nth-child(6){animation-delay:0.5s}
+  .loading-bar:nth-child(7){animation-delay:0.4s}
+  .loading-bar:nth-child(8){animation-delay:0.3s}
+  @keyframes bar { 0%,100%{transform:scaleY(0.3);opacity:0.4} 50%{transform:scaleY(1);opacity:1} }
+  .loading-label { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); letter-spacing: 0.1em; margin-bottom: 16px; }
+  .loading-step { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin: 5px 0; letter-spacing: 0.08em; transition: color 0.3s; }
+  .loading-step.done { color: var(--bull); }
+  .loading-step.active-step { color: var(--accent); }
+
+  /* RESULT */
+  .result-area { position: relative; z-index: 1; max-width: 1300px; margin: 0 auto; padding: 0 24px 80px; display: none; }
+  .result-area.active { display: block; }
+
+  .company-header {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+    padding: 24px 28px; margin-bottom: 24px;
+  }
+  .ch-ticker { font-family: var(--font-display); font-size: 36px; font-weight: 800; color: var(--accent); letter-spacing: -0.02em; }
+  .ch-name { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+  .ch-right { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-align: right; line-height: 2; }
+  .ch-right .model-tag { color: var(--accent2); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; margin-bottom: 20px; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+  .card-header-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary); }
+  .section-badge { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase; padding: 2px 8px; border-radius: 2px; background: rgba(0,229,255,0.1); color: var(--accent); border: 1px solid rgba(0,229,255,0.2); }
+
+  /* ANALYSIS OUTPUT */
+  .analysis-content {
+    padding: 24px 28px; font-size: 13px; line-height: 1.8;
+    color: var(--text-primary); word-break: break-word;
+  }
+  .analysis-content h1 { font-family: var(--font-display); font-size: 20px; font-weight: 800; color: var(--accent); margin: 24px 0 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .analysis-content h2 { font-family: var(--font-display); font-size: 16px; font-weight: 700; color: var(--text-primary); margin: 20px 0 10px; }
+  .analysis-content h3 { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); margin: 16px 0 8px; }
+  .analysis-content strong { color: var(--accent); }
+  .analysis-content em { color: var(--neutral); font-style: normal; }
+  .analysis-content table { width: 100%; border-collapse: collapse; margin: 14px 0; font-family: var(--font-mono); font-size: 11px; }
+  .analysis-content th { background: var(--surface2); color: var(--text-secondary); padding: 8px 12px; border: 1px solid var(--border); text-align: left; font-weight: 400; }
+  .analysis-content td { padding: 8px 12px; border: 1px solid var(--border); }
+  .analysis-content tr:nth-child(even) td { background: rgba(17,22,39,0.5); }
+  .analysis-content code { font-family: var(--font-mono); font-size: 11px; background: var(--surface2); border: 1px solid var(--border); padding: 1px 6px; border-radius: 2px; color: var(--accent2); }
+  .analysis-content blockquote { border-left: 3px solid var(--accent); padding-left: 16px; color: var(--text-secondary); margin: 12px 0; }
+  .analysis-content ul, .analysis-content ol { padding-left: 20px; margin: 8px 0; }
+  .analysis-content li { margin: 5px 0; }
+  .analysis-content hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  .tag-real { display:inline-block; font-size:9px; font-family:var(--font-mono); padding:1px 5px; border-radius:2px; background:rgba(0,214,143,0.15); border:1px solid var(--bull); color:var(--bull); }
+  .tag-est { display:inline-block; font-size:9px; font-family:var(--font-mono); padding:1px 5px; border-radius:2px; background:rgba(123,97,255,0.15); border:1px solid var(--accent2); color:var(--accent2); }
+  .tag-assume { display:inline-block; font-size:9px; font-family:var(--font-mono); padding:1px 5px; border-radius:2px; background:rgba(240,180,41,0.15); border:1px solid var(--neutral); color:var(--neutral); }
+
+  .error-box { margin: 24px; padding: 20px; background: rgba(255,77,109,0.1); border: 1px solid var(--bear); border-radius: 3px; font-family: var(--font-mono); font-size: 12px; color: var(--bear); line-height: 1.8; }
+  .disclaimer { margin-bottom: 20px; padding: 12px 18px; background: rgba(240,180,41,0.05); border: 1px solid rgba(240,180,41,0.15); border-radius: 3px; font-family: var(--font-mono); font-size: 10px; color: var(--neutral); line-height: 1.6; }
+
+  .streaming-cursor::after { content: '▌'; animation: blink 0.8s infinite; color: var(--accent); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .fade-in { animation: fadeIn 0.4s ease forwards; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+  @media (max-width: 768px) {
+    .topbar { padding: 0 16px; }
+    .search-section { padding: 28px 16px 20px; }
+    .result-area { padding: 0 16px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- API KEY MODAL -->
+<div class="api-modal" id="apiModal">
+  <div class="api-box">
+    <h2>ALPHA DESK</h2>
+    <p>Claude API 키를 입력하면<br>DCF · Comps · 시나리오 분석이 자동 실행됩니다.</p>
+    <div class="api-input-wrap">
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." />
+      <button onclick="saveApiKey()">START TERMINAL</button>
+    </div>
+    <div class="api-note">
+      🔒 키는 이 브라우저 세션에만 저장됩니다. 서버로 전송되지 않습니다.<br>
+      발급: <a href="https://console.anthropic.com" target="_blank" style="color:var(--accent)">console.anthropic.com</a>
+    </div>
+  </div>
+</div>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="logo">ALPHA<span>DESK</span></div>
+  <div class="topbar-right">
+    <div class="live-dot"></div>
+    <span id="clock">--:--:--</span>
+    <span class="api-status" id="apiStatus" onclick="resetApiKey()">● API CONNECTED</span>
+  </div>
+</header>
+
+<!-- TICKER TAPE (실시간) -->
+<div class="ticker-tape">
+  <div class="ticker-tape-inner" id="tapeInner">
+    <span class="tape-loading">
+      <span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;animation:pulse 1s infinite"></span>
+      실시간 주가 로딩 중...
+    </span>
+  </div>
+</div>
+
+<!-- SEARCH -->
+<section class="search-section fade-in">
+  <h1 class="search-headline"><span class="hl">AI-Powered</span> IB Research</h1>
+  <p class="search-sub">// DCF · COMPS · 시나리오 · 딜레이더 — 실시간 주가 연동</p>
+  <div class="search-bar">
+    <input type="text" id="searchInput" placeholder="기업명 또는 티커 입력 (예: 삼성전자, NVDA, TSMC, 현대차)..." />
+    <button onclick="runAnalysis()" id="analyzeBtn">ANALYZE ▶</button>
+  </div>
+  <div class="quick-chips">
+    <div class="chip" onclick="setAndRun('NVDA')">NVDA</div>
+    <div class="chip" onclick="setAndRun('삼성전자')">삼성전자</div>
+    <div class="chip" onclick="setAndRun('TSMC')">TSMC</div>
+    <div class="chip" onclick="setAndRun('MSFT')">MSFT</div>
+    <div class="chip" onclick="setAndRun('현대차')">현대차</div>
+    <div class="chip" onclick="setAndRun('카카오')">카카오</div>
+  </div>
+</section>
+
+<!-- LOADING -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="loading-bars">
+    <div class="loading-bar"></div><div class="loading-bar"></div>
+    <div class="loading-bar"></div><div class="loading-bar"></div>
+    <div class="loading-bar"></div><div class="loading-bar"></div>
+    <div class="loading-bar"></div><div class="loading-bar"></div>
+  </div>
+  <div class="loading-label" id="loadingLabel">AI 분석 실행 중...</div>
+  <div id="loadingSteps">
+    <div class="loading-step" id="step1">→ 딜 레이더 스캔</div>
+    <div class="loading-step" id="step2">→ DCF 모델 구성</div>
+    <div class="loading-step" id="step3">→ Comps 피어 비교</div>
+    <div class="loading-step" id="step4">→ 시나리오 시뮬레이션</div>
+    <div class="loading-step" id="step5">→ 인사이트 종합</div>
+  </div>
+</div>
+
+<!-- RESULT -->
+<div class="result-area" id="resultArea">
+  <div class="disclaimer">
+    ⚠ AI 생성 분석입니다. 투자 권유가 아니며, 실제 투자 전 공시자료 및 전문가 조언을 반드시 확인하세요.
+  </div>
+  <div class="company-header">
+    <div>
+      <div class="ch-ticker" id="chTicker">—</div>
+      <div class="ch-name" id="chName">—</div>
+    </div>
+    <div class="ch-right">
+      <div>분석 시각: <span id="analysisTime">—</span></div>
+      <div>모델: <span class="model-tag">claude-sonnet-4-20250514</span></div>
+      <div>프레임워크: DCF + Comps + 시나리오 + 딜레이더</div>
+    </div>
+  </div>
+  <div class="card fade-in">
+    <div class="card-header">
+      <span class="card-header-label">🎯 IB 풀 리서치 리포트</span>
+      <span class="section-badge">LIVE AI</span>
+    </div>
+    <div class="analysis-content" id="analysisOutput"></div>
+  </div>
+</div>
+
+<script>
+// ── 설정 ──
+// 티커 테이프에 표시할 종목 (Yahoo Finance 심볼)
+const TAPE_SYMBOLS = [
+  '005930.KS',  // 삼성전자
+  '000660.KS',  // SK하이닉스
+  'NVDA',
+  'TSMC',
+  'AMD',
+  'MSFT',
+  '005380.KS',  // 현대차
+  '035720.KS',  // 카카오
+  'AVGO',
+  '035420.KS',  // NAVER
+  'INTC',
+  'QCOM',
+];
+
+// 표시용 이름 (Yahoo 심볼 → 한국어/영문 이름)
+const SYMBOL_NAMES = {
+  '005930.KS': '삼성전자',
+  '000660.KS': 'SK하이닉스',
+  '005380.KS': '현대차',
+  '035720.KS': '카카오',
+  '035420.KS': 'NAVER',
+  'NVDA': 'NVDA',
+  'TSMC': 'TSMC',
+  'AMD': 'AMD',
+  'MSFT': 'MSFT',
+  'AVGO': 'AVGO',
+  'INTC': 'INTC',
+  'QCOM': 'QCOM',
+};
+
+let API_KEY = '';
+
+// ── INIT ──
+window.addEventListener('DOMContentLoaded', () => {
+  updateClock();
+  setInterval(updateClock, 1000);
+  loadTapeData();
+  setInterval(loadTapeData, 60000); // 1분마다 갱신
+
+  const saved = sessionStorage.getItem('alphadesk_key');
+  if (saved) {
+    API_KEY = saved;
+    document.getElementById('apiModal').classList.add('hidden');
+    document.getElementById('apiStatus').classList.add('connected');
+  }
+
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') runAnalysis();
+  });
+});
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+}
+
+// ── API KEY ──
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key.startsWith('sk-ant')) {
+    alert('올바른 Claude API 키를 입력하세요. (sk-ant-... 형식)');
+    return;
+  }
+  API_KEY = key;
+  sessionStorage.setItem('alphadesk_key', key);
+  document.getElementById('apiModal').classList.add('hidden');
+  document.getElementById('apiStatus').classList.add('connected');
+}
+
+function resetApiKey() {
+  if (!confirm('API 키를 초기화하시겠습니까?')) return;
+  API_KEY = '';
+  sessionStorage.removeItem('alphadesk_key');
+  document.getElementById('apiStatus').classList.remove('connected');
+  document.getElementById('apiModal').classList.remove('hidden');
+}
+
+// ── 실시간 주가 (Netlify Function 호출) ──
+async function loadTapeData() {
+  try {
+    const symbols = TAPE_SYMBOLS.join(',');
+    // Netlify Function 엔드포인트
+    const res = await fetch(`/.netlify/functions/stock?symbols=${encodeURIComponent(symbols)}`);
+    if (!res.ok) throw new Error('API 오류');
+    const data = await res.json();
+    renderTape(data);
+  } catch(e) {
+    console.warn('주가 로딩 실패:', e.message);
+    // 실패 시 조용히 처리 (티커 숨기기)
+    document.getElementById('tapeInner').innerHTML =
+      '<span class="tape-loading" style="color:var(--text-muted)">주가 데이터 로딩 실패 — 분석은 정상 작동합니다</span>';
+  }
+}
+
+function formatPrice(price, currency) {
+  if (currency === 'KRW') return price.toLocaleString('ko-KR') + '원';
+  return '$' + price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function renderTape(data) {
+  const items = TAPE_SYMBOLS.map(sym => {
+    const d = data[sym];
+    if (!d || d.error) return '';
+    const name = SYMBOL_NAMES[sym] || sym;
+    const priceStr = formatPrice(d.price, d.currency);
+    const chgStr = (d.positive ? '+' : '') + d.changePct.toFixed(2) + '%';
+    const cls = d.positive ? 'pos' : 'neg';
+    return `<div class="tape-item">
+      <span class="tape-ticker">${name}</span>
+      <span class="tape-price">${priceStr}</span>
+      <span class="tape-chg ${cls}">${chgStr}</span>
+    </div>`;
+  }).filter(Boolean);
+
+  if (!items.length) return;
+
+  // 루프 위해 2번 반복
+  const inner = document.getElementById('tapeInner');
+  inner.innerHTML = [...items, ...items].join('');
+  inner.classList.add('animate');
+}
+
+// ── SEARCH ──
+function setTicker(name) { document.getElementById('searchInput').value = name; }
+function setAndRun(name) { setTicker(name); runAnalysis(); }
+
+// ── ANALYSIS ──
+async function runAnalysis() {
+  if (!API_KEY) {
+    document.getElementById('apiModal').classList.remove('hidden');
+    return;
+  }
+
+  const company = document.getElementById('searchInput').value.trim();
+  if (!company) return;
+
+  document.getElementById('loadingScreen').classList.add('active');
+  document.getElementById('resultArea').classList.remove('active');
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('loadingLabel').textContent = `"${company}" 분석 실행 중...`;
+
+  const steps = ['step1','step2','step3','step4','step5'];
+  steps.forEach(s => document.getElementById(s).className = 'loading-step');
+  let idx = 0;
+  const timer = setInterval(() => {
+    if (idx > 0) document.getElementById(steps[idx-1]).className = 'loading-step done';
+    if (idx < steps.length) { document.getElementById(steps[idx]).className = 'loading-step active-step'; idx++; }
+  }, 1500);
+
+  const systemPrompt = `당신은 월스트리트 투자은행 출신의 시니어 재무 분석가입니다.
+
+■ 할루시네이션 방어 규칙 (최우선)
+모든 숫자에 태그 필수:
+• [실제] → 공시 기반 (출처 명시)
+• [추정] → 실제 데이터 기반 산출
+• [가정] → 분석용 설정값
+불확실 정보는 반드시 명시. 숫자 지어내기 금지.
+
+■ 출력 구조
+
+# 🎯 [기업명] 핵심 인사이트 — 10 Key Points
+① 최종 판단 (한 줄)
+② DCF 인사이트
+③ Comps 인사이트
+④ 시나리오 핵심 (Bull/Base/Bear 판단)
+⑤ 가장 중요한 변수
+⑥ 시장이 놓치는 것
+⑦ 최대 리스크
+⑧ 딜 레이더 요약
+⑨ 업사이드 촉매 + 데이터 신뢰도 (X/10)
+⑩ 액션 아이템 3가지
+
+---
+
+## 🔍 딜 레이더
+• [딜명] — [루머/공식/규제심사], 임팩트 ±X%
+
+---
+
+## ■ DCF 분석 (FCFF 기준)
+FCFF = EBIT×(1-Tax) + D&A - Capex - ΔNWC
+가정 및 산출 결과 표로 정리.
+
+---
+
+## ■ 확률가중 적정가
+| 시나리오 | 확률 | 주당가치 | 가중값 |
+|--------|------|--------|------|
+| Bull | X% | | |
+| Base | X% | | |
+| Bear | X% | | |
+
+→ **확률가중 적정가: X원(또는 $X)**
+→ 현주가 대비 X% 업/다운사이드
+
+**한 줄 판단:** "..."
+
+---
+
+## ■ 비교기업 분석 (Comps)
+실존 상장사 5~8개. 존재하지 않는 멀티플 금지.
+
+| 기업 | EV/EBITDA | P/E | EV/Rev | 매출성장 | EBITDA마진 |
+|-----|----------|-----|--------|---------|----------|
+
+---
+
+## ■ 민감도 분석
+WACC × 터미널성장률 5×5 테이블
+
+---
+
+## ■ 이벤트별 주가 영향
+• 이벤트 → ±X%, 확률 X%
+(3~5개, 근거 포함)
+
+---
+
+## ■ 가정 테이블
+| 항목 | 값 | 근거 | 민감도 |
+|-----|---|------|------|
+
+---
+
+## 📋 신뢰도 체크리스트
+• 출처:
+• 데이터 구성:
+• 불확실 가정 Top 3:
+• 한계:
+
+---
+
+## 추가 분석 가능
+① ...
+② ...
+③ ...
+
+한국어로 작성. 재무용어 영문 병기. 마크다운 테이블 적극 활용.`;
+
+  const userMsg = `기업 분석: **${company}**
+상장 여부 확인 후, 알려진 재무 정보 기반으로 DCF + Comps + 시나리오 + 딜레이더를 모두 실행해주세요. 불확실한 수치는 [가정] 태그로 명시하세요.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMsg }],
+        stream: true,
+      }),
+    });
+
+    clearInterval(timer);
+    steps.forEach(s => document.getElementById(s).className = 'loading-step done');
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || `API 오류 ${res.status}`);
+    }
+
+    document.getElementById('loadingScreen').classList.remove('active');
+    document.getElementById('resultArea').classList.add('active');
+    document.getElementById('chTicker').textContent = company.toUpperCase().slice(0, 10);
+    document.getElementById('chName').textContent = company;
+    document.getElementById('analysisTime').textContent = new Date().toLocaleString('ko-KR');
+
+    const outputEl = document.getElementById('analysisOutput');
+    outputEl.innerHTML = '';
+    outputEl.classList.add('streaming-cursor');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6);
+        if (raw === '[DONE]') continue;
+        try {
+          const json = JSON.parse(raw);
+          if (json.type === 'content_block_delta' && json.delta?.text) {
+            fullText += json.delta.text;
+            outputEl.innerHTML = md(fullText);
+          }
+        } catch(e) {}
+      }
+    }
+
+    outputEl.classList.remove('streaming-cursor');
+
+  } catch(err) {
+    clearInterval(timer);
+    document.getElementById('loadingScreen').classList.remove('active');
+    document.getElementById('resultArea').classList.add('active');
+    document.getElementById('chTicker').textContent = 'ERROR';
+    document.getElementById('chName').textContent = company;
+    document.getElementById('analysisTime').textContent = new Date().toLocaleString('ko-KR');
+    document.getElementById('analysisOutput').innerHTML =
+      `<div class="error-box">❌ 분석 실패: ${err.message}<br><br>
+      확인사항:<br>
+      • API 키가 올바른지 확인 (sk-ant-...)<br>
+      • API 잔액 확인 (console.anthropic.com)<br>
+      • 네트워크 연결 확인</div>`;
+  }
+
+  document.getElementById('analyzeBtn').disabled = false;
+}
+
+// ── 마크다운 렌더러 ──
+function md(text) {
+  return text
+    .replace(/\[실제\]/g, '<span class="tag-real">실제</span>')
+    .replace(/\[추정\]/g, '<span class="tag-est">추정</span>')
+    .replace(/\[가정\]/g, '<span class="tag-assume">가정</span>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/`(.+?)`/g, '<code>$1</code>')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
+    // 테이블
+    .replace(/(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)+)/g, (_, header, __, rows) => {
+      const ths = header.split('|').filter(c => c.trim()).map(c => `<th>${c.trim()}</th>`).join('');
+      const trs = rows.trim().split('\n').map(r => {
+        const tds = r.split('|').filter(c => c.trim()).map(c => `<td>${c.trim()}</td>`).join('');
+        return `<tr>${tds}</tr>`;
+      }).join('');
+      return `<table><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+    })
+    .replace(/^[•\-\*] (.+)$/gm, '<li>$1</li>')
+    .replace(/^(\d+)\. (.+)$/gm, '<li>$1. $2</li>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+</script>
+</body>
+</html>
